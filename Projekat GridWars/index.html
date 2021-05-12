@@ -1,0 +1,866 @@
+<html>
+
+<head>
+	<link rel="stylesheet" type="text/css" href="main.css">
+</head>
+
+<body>
+
+	<div id='map'></div>
+	<br />
+	<div id='data'>
+		<div id='dataTable'>
+			<table style='width:250px;'>
+			<th><td>Red</td><td>Blue</td></th>
+			<tr><td>Coins</td><td id='rC'>0</td><td id='bC'>0</td></tr>
+			<tr><td>Gold bars</td><td id='rG'>0</td><td id='bG'>0</td></tr>
+			<tr><td>Treasure</td><td id='rT'>0</td><td id='bT'>0</td></tr>
+			</table>
+		</div>
+		
+		<div id='turn'></div>
+	</div>
+	<br />
+	
+	<p id='winner' style='color:red;'></p>
+	<p id='heuristic' style='color:blue;'></p>
+	<script>
+	var mapX = 4, mapY = 4;
+	var tileX = 75, tileY = 75;
+	
+	
+	// init MAP
+	var MAP = [];
+	for (var i=0;i<mapY;i++)
+	{
+		MAP[i] = new Array(mapX);
+	}
+	for(var i = 0; i < mapY; i++)
+	{
+		for(var j = 0; j < mapX; j++)
+		{
+			MAP[i][j]=[-1,-1,-1];
+		}
+	}
+	
+	var TILE_NAME = [];
+	TILE_NAME[0]="grass";
+	TILE_NAME[10]="botred";
+	TILE_NAME[20]="botblue";
+	TILE_NAME[100]="coins";
+	TILE_NAME[101]="gold";
+	TILE_NAME[102]="treasure";
+	var CoinNum, GoldNum, TreasureNum;   // jedinice
+	
+	//MAP[0][0]=[-1,10,20];
+	
+	document.addEventListener('keyup', keyUp);
+	document.addEventListener('keydown', keyDown);
+	var keyPressed=[];
+	var keyOk=true;
+	function keyUp(e) {
+	  keyPressed[e.key]=false;
+	  keyOk=true;
+	}
+	function keyDown(e) {
+	  keyPressed[e.key]=true;
+	  
+	 // console.log(e.key);
+	}
+	
+	class Player
+	{
+	
+		constructor(x, y, mapIndex, picValue)
+		{
+			this.x = x;
+			this.y = y;
+			this.mapIndex=mapIndex;
+			this.picValue=picValue;
+			this.C = 0;
+			this.G = 0;
+			this.T = 0; //skor
+			this.Eat=[-1,-1];// ovo je potrebno da li zajedno jedu neko polje
+			this.LastMove=4;// imamo 0 1 2 3 4
+			                // 0 je w; 1 je s; 2 je a; 3 je d; 4 znaci da EAT u datom potezu
+							// stavljamo na 4 zato sto je slobodan u pocetnom trenutku
+		}
+		
+	}
+	let B1 = new Player(0,0,1,10);
+	let B2 = new Player(0,0,2,20);
+	MAP[B1.y][B1.x][B1.mapIndex]=B1.picValue;
+	MAP[B2.y][B2.x][B2.mapIndex]=B2.picValue;
+	function addTile(i, j)
+	{
+			var newitem = document.createElement("div");
+			newitem.style.width=tileX;
+			newitem.style.height=tileY;
+			//newitem.setAttribute('onmouseenter', 'showBuilding('+i+','+j+')');
+			//newitem.setAttribute('onmouseleave', 'leaveBuilding('+i+','+j+')');
+			//newitem.setAttribute('onclick', 'setBuilding('+i+','+j+')');
+			//newitem.setAttribute('oncontextmenu', 'leaveBuilding('+i+','+j+');cancelBuilding();return false;');
+			newitem.setAttribute('class', 'tile');
+			//newitem.style.backgroundColor='black';
+			newitem.style.backgroundImage="url('Images/grass.png')";
+			/*linear-gradient( rgba(0,0,0,.5), rgba(0,0,0,.5) ),*/
+			newitem.style.display='inline-block';
+
+			newitem.setAttribute('id', 'm'+'('+i+','+j+')');
+			//if(j==mapX-1)
+			//newitem.setAttribute('class','newline');
+
+			document.getElementById('map').appendChild(newitem);
+	}
+	
+	function makeMap()
+	{
+		document.getElementById('map').style.width=tileX*(mapX);
+		document.getElementById('map').style.height=tileY*(mapY);
+		for(var i = 0; i < mapY; i++)
+		{
+			for(var j = 0; j < mapX; j++)
+			{
+				addTile(i,j);
+			}
+		}
+		
+		var rx, ry;
+		MAP[B1.y][B1.x][0]=100;
+		MAP[B2.y][B2.x][0]=100;
+		CoinNum=5; GoldNum=3; TreasureNum=1;
+		for(var i = 0; i < CoinNum; i++)
+		{
+			do{
+				rx = Math.floor(Math.random() * mapX); 
+				ry = Math.floor(Math.random() * mapY); 
+			
+			
+			}while(MAP[ry][rx][0]!==-1);
+			MAP[ry][rx][0] = 100;
+		}
+		for(var i = 0; i < GoldNum; i++)
+		{
+			do{
+				rx = Math.floor(Math.random() * mapX); 
+				ry = Math.floor(Math.random() * mapY); 
+			
+	
+			}while(MAP[ry][rx][0]!==-1);
+			MAP[ry][rx][0] = 101;
+		}
+		for(var i = 0; i < TreasureNum; i++)
+		{
+			do{
+				rx = Math.floor(Math.random() * mapX); 
+				ry = Math.floor(Math.random() * mapY); 
+			
+			}while(MAP[ry][rx][0]!==-1);
+			MAP[ry][rx][0] = 102;
+		}
+		MAP[B1.y][B1.x][0]=-1;
+		MAP[B2.y][B2.x][0]=-1;
+	}
+	function makeMap2()
+	{
+		document.getElementById('map').style.width=tileX*(mapX);
+		document.getElementById('map').style.height=tileY*(mapY);
+		for(var i = 0; i < mapY; i++)
+		{
+			for(var j = 0; j < mapX; j++)
+			{
+				addTile(i,j);
+			}
+		}
+		/*var copy=[[-1,-1,100,101],
+				  [102,-1,-1,100],
+				  [100,100,101,100],
+				  [101,-1,-1,-1]];*/
+				  
+		var copy=[[-1,-1,100,-1],
+				  [102,101,100,101],
+				   [100,100,101,100],];		  
+		CoinNum=5; GoldNum=3; TreasureNum=1;
+		for(var i = 0; i < mapY; i++)
+		{
+			for(var j = 0; j < mapX; j++)
+				MAP[i][j][0] = copy[i][j];
+		}
+		
+	}
+	function refreshTable(X, Y, turn)
+	{
+		document.getElementById('rC').innerHTML=X.C;
+		document.getElementById('rG').innerHTML=X.G;
+		document.getElementById('rT').innerHTML=X.T;
+		document.getElementById('bC').innerHTML=Y.C;
+		document.getElementById('bG').innerHTML=Y.G;
+		document.getElementById('bT').innerHTML=Y.T;
+		if(turn===-1)
+			document.getElementById('turn').style.backgroundColor='red';
+		else if(turn===1)
+			document.getElementById('turn').style.backgroundColor='blue';
+	}
+	function refreshMap()
+	{
+		for(var i = 0; i < mapY; i++)
+		{
+			for(var j = 0; j < mapX; j++)
+			{
+				refreshTile(i,j);
+			}
+		}
+	}
+	function refreshTile(i, j)
+	{
+		var item =document.getElementById('m('+i+','+j+')');
+		var Pics;
+		if(MAP[i][j][2]!==-1)
+		{
+			if(typeof Pics !== 'undefined')
+				Pics+=", url('Images/"+TILE_NAME[MAP[i][j][2]]+".png')";
+			else	
+				Pics="url('Images/"+TILE_NAME[MAP[i][j][2]]+".png')";
+		}	
+		if(MAP[i][j][1]!==-1)
+		{
+			if(typeof Pics !== 'undefined')
+				Pics+=", url('Images/"+TILE_NAME[MAP[i][j][1]]+".png')";
+			else
+				Pics="url('Images/"+TILE_NAME[MAP[i][j][1]]+".png')";
+		}
+		if(MAP[i][j][0]!==-1)
+		{	
+			if(typeof Pics !== 'undefined')
+				Pics+=", url('Images/"+TILE_NAME[MAP[i][j][0]]+".png')";
+			else
+				Pics = "url('Images/"+TILE_NAME[MAP[i][j][0]]+".png')";
+		}
+		
+		
+		
+		
+		//item.style.backgroundImage="url('Images/potato.png')";
+		//item.style.backgroundImage=item.style.backgroundImage+", url('Images/potato2.png')";
+		if(typeof Pics !== 'undefined')
+			item.style.backgroundImage=Pics+", url('Images/grass.png')";
+		else
+			item.style.backgroundImage="url('Images/grass.png')";
+
+	}
+	
+	var turn = -1;
+	var smerY = [-1,1,0,0];
+	var smerX = [0,0,1,-1];
+	function HumanPlayer(X)
+	{
+		if(keyOk===false)
+			return;
+
+		var ind = -1;
+		if(keyPressed['w']===true)
+		{
+			ind=0;
+		}
+		if(keyPressed['s']===true)
+		{
+			ind=1;
+		}
+		if(keyPressed['d']===true)
+		{
+			ind=2;
+		}
+		if(keyPressed['a']===true)
+		{
+			ind=3;
+			
+		}
+		if(keyPressed[' ']===true)
+		{
+			//console.log('da');
+			keyOk=false;
+			if(MAP[X.y][X.x][0]!==-1)
+			{	
+				
+						/*switch(MAP[X.y][X.x][0])
+						{
+							case 100:X.C+=0.5;CoinNum--;break;
+							case 101:X.G+=0.5;GoldNum--;break;
+							case 102:X.T+=0.5;TreasureNum--;break;
+						}*/
+					
+				X.Eat[0] = X.x; X.Eat[1]=X.y;
+				X.LastMove=4;
+				//MAP[X.y][X.x][0]=-1;
+				
+				
+			
+			}
+			turn*=-1;
+			return;
+		}
+		if(ind!==-1)
+		{
+			keyOk=false;
+			
+			if(X.x+smerX[ind]>=0&&X.x+smerX[ind]<mapX&&X.y+smerY[ind]>=0&&X.y+smerY[ind]<mapY)
+			{
+				turn*=-1;
+				X.LastMove=ind;
+				MAP[X.y][X.x][X.mapIndex]=-1;
+				X.x+=smerX[ind];
+				X.y+=smerY[ind];
+			} 
+			
+		}
+	}
+	var won=0,lost=0,tie = 0;
+	function Heuristic(B1,B2)
+	{
+		won = lost = tie = 0;
+		var score = 0;
+		
+		var ch = [1,1,1];
+		
+		
+		if(B1.C>2.5){
+			won++;score++;ch[0]=0;}
+		else if(B2.C>2.5)
+		{score--;lost++;ch[0]=0;}
+		else if(CoinNum===0)
+			{ch[0]=0;tie++;}
+		else
+		{
+			score += 1.0/3 *B1.C; // 5 coina
+			score -= 1.0/3 *B2.C;
+		}
+		
+		
+		if(B1.G>1.5){
+			won++;score++;ch[1]=0;}	
+		else if(B2.G>1.5)
+			{lost++;score--;ch[1]=0;}
+		else if(GoldNum===0)
+			{tie++;ch[1]=0;}
+		else
+		{
+			score += 1.0/2 *B1.G; // 3 gold bara
+			score -= 1.0/2 *B2.G;
+		}
+
+		if(B1.T>0.5){
+			ch[2]=0;won++;score++;}
+		else if(B2.T>0.5)
+			{lost++;score--;ch[2]=0;}
+		else if(TreasureNum===0)
+		{ch[2]=0;tie++;}
+			
+		
+		
+		if(won+lost+tie===3)
+		{
+		if(won>lost)
+			return 1000000; // inf
+		else if(won<lost)
+			return -1000000; // -inf	
+		else
+			return 0;
+		
+		}
+		for(var i = 0; i < mapY; i++)
+		{ 
+			for(var j = 0; j < mapX; j++)
+			{
+				switch(MAP[i][j][0])
+				{
+					case 100:if(ch[0])
+					{
+						score+=1.0/3*1.0/(Math.abs(B1.x-j)+Math.abs(B1.y-i)+1);
+						score-=1.0/3*1.0/(Math.abs(B2.x-j)+Math.abs(B2.y-i)+1);
+					}break;
+					case 101:if(ch[1])
+					{
+						score+=0.5*1.0/(Math.abs(B1.x-j)+Math.abs(B1.y-i)+1);
+						score-=0.5*1.0/(Math.abs(B2.x-j)+Math.abs(B2.y-i)+1);
+					}break;
+					case 102:if(ch[2])
+					{
+						score+=1.0/(Math.abs(B1.x-j)+Math.abs(B1.y-i)+1);
+						score-=1.0/(Math.abs(B2.x-j)+Math.abs(B2.y-i)+1);
+					}break;
+				}	
+			}
+		}
+		return score;
+	}
+	var possible = new Array();
+	//
+	// uradjeno je ovako da smanjimo moguce petlje i slozenost
+	// cim podje gore ili dole nastavice do eat
+	function possibleMoves(B)
+	{
+		possible = [];
+		if((B.LastMove===4||B.LastMove!==1))   // ako zadnjeg poteza nije EAT ili isao dole onda moze gore
+		{
+			if(B.x+smerX[0]>=0&&B.x+smerX[0]<mapX&&B.y+smerY[0]>=0&&B.y+smerY[0]<mapY) // van mape
+				possible.push(0);
+		}
+		if((B.LastMove===4||B.LastMove!==0))   // ako zadnjeg poteza nije EAT ili isao gore onda moze dole
+		{
+			if(B.x+smerX[1]>=0&&B.x+smerX[1]<mapX&&B.y+smerY[1]>=0&&B.y+smerY[1]<mapY) // van mape
+				possible.push(1);
+		}
+		if((B.LastMove===4||(B.LastMove!==2&&B.LastMove!==0&&B.LastMove!==1)))   
+		{
+			if(B.x+smerX[3]>=0&&B.x+smerX[3]<mapX&&B.y+smerY[3]>=0&&B.y+smerY[3]<mapY) // van mape
+				possible.push(3);
+		}
+		if((B.LastMove===4||(B.LastMove!==3&&B.LastMove!==0&&B.LastMove!==1)))   
+		{
+			if(B.x+smerX[2]>=0&&B.x+smerX[2]<mapX&&B.y+smerY[2]>=0&&B.y+smerY[2]<mapY) // van mape
+				possible.push(2);
+		}
+		
+		if(MAP[B.y][B.x][0]!==-1)
+		{
+			possible.push(4);
+		}
+		
+	}
+	
+	var prosli=-1;
+	var find;
+	function MinimaxPlay(B1,B2,turn,depth)
+	{
+		if(turn===-1)
+			possibleMoves(B1);
+		else
+			possibleMoves(B2);
+		var potezi = new Array();
+		for(var i = 0; i < possible.length; i++)
+		{
+			potezi.push(possible[i]);
+		}
+		if(potezi.length===0)
+		{
+			var f = Heuristic(B1,B2);
+			if(turn === -1)
+				return -1000+f;
+			else
+				return 1000-f;
+		}
+		if(depth===0)
+		{
+			return Heuristic(B1,B2);
+		}
+		if(CoinNum+GoldNum+TreasureNum===0)
+		{
+			var count = 0;
+			if(B1.C>B2.C)
+				count++;
+			else if(B1.C===B2.C)
+				count+=0.5;
+			if(B1.G>B2.G)
+				count++;
+			else if(B1.G===B2.G)
+				count+=0.5;
+			if(B1.T>B2.T)
+				count++;
+			else if(B1.T===B2.T)
+				count+=0.5;
+			if(count>=2)
+				return 1000000;
+			else if(count===1.5)
+				return 0;
+			else
+				return -1000000;
+		}
+		var bestValue=1000000*turn;
+		var moveBest = -1;
+		var X = Object.assign({},B1);
+		var Y = Object.assign({},B2);
+		for(var i = 0; i < potezi.length; i++)
+		{
+			if(depth===30)
+			{
+				var debug ="here";
+			}
+			
+			
+			var curr;
+			if(turn === -1)
+			{
+				if(potezi[i]===4)
+				{
+						var t = MAP[X.y][X.x][0];
+						prosli = t;
+						switch(t)
+						{
+							case 100:X.C+=1;CoinNum--;break;
+							case 101:X.G+=1;GoldNum--;break;
+							case 102:X.T+=1;TreasureNum--;break;
+						}
+						MAP[X.y][X.x][0]=-1;
+						
+						var lm = X.LastMove;
+						X.LastMove = potezi[i];
+						curr = MinimaxPlay(X,Y,turn*(-1),depth-1);
+						X.LastMove = lm;
+						
+						MAP[X.y][X.x][0]=t;
+						switch(t)
+						{
+							case 100:X.C-=1;CoinNum++;break;
+							case 101:X.G-=1;GoldNum++;break;
+							case 102:X.T-=1;TreasureNum++;break;
+						}
+				}
+					
+				
+				else
+				{
+					X.x+=smerX[potezi[i]];
+					X.y+=smerY[potezi[i]];
+					var lm = X.LastMove;
+					X.LastMove = potezi[i];
+					curr = MinimaxPlay(X,Y,turn*(-1),depth-1);
+					X.LastMove = lm;
+					
+					X.x-=smerX[potezi[i]];
+					X.y-=smerY[potezi[i]];
+				}
+				if(curr>bestValue)
+				{
+					bestValue=curr;
+					moveBest=potezi[i];
+				}
+				
+				
+			}
+			else if(turn === 1)
+			{
+				
+				
+					if(prosli!==-1)
+					{
+						if(X.x === Y.x && X.y === Y.y)
+						{
+							switch(prosli)
+							{
+								case 100:X.C-=0.5;Y.C+=0.5;break;
+								case 101:X.G-=0.5;Y.G+=0.5;break;
+								case 102:X.T-=0.5;Y.T+=0.5;break;
+							}
+							var lm = Y.LastMove;
+							Y.LastMove = 4;
+							curr = MinimaxPlay(X,Y,turn*(-1),depth-1);
+							//if(depth >= 25)
+							//	console.log(depth + " " + curr);
+							Y.LastMove = lm;
+							switch(prosli)
+							{
+								case 100:X.C+0.5;Y.C-=0.5;break;
+								case 101:X.G+=0.5;Y.G-=0.5;break;
+								case 102:X.T+=0.5;Y.T-=0.5;break;
+							}
+							
+						}
+					}
+					if(potezi[i]===4)
+					{
+						var t = MAP[Y.y][Y.x][0];
+						switch(t)
+						{
+							case 100:Y.C+=1;CoinNum--;break;
+							case 101:Y.G+=1;GoldNum--;break;
+							case 102:Y.T+=1;TreasureNum--;break;
+						}
+						MAP[Y.y][Y.x][0]=-1;
+						
+						var lm = Y.LastMove;
+						Y.LastMove = potezi[i];
+						curr = MinimaxPlay(X,Y,turn*(-1),depth-1);
+						Y.LastMove = lm;
+						
+						MAP[Y.y][Y.x][0]=t;
+						switch(t)
+						{
+							case 100:Y.C-=1;CoinNum++;break;
+							case 101:Y.G-=1;GoldNum++;break;
+							case 102:Y.T-=1;TreasureNum++;break;
+						}
+					}
+					else
+					{
+						Y.x+=smerX[potezi[i]];
+						Y.y+=smerY[potezi[i]];
+						var lm = Y.LastMove;
+						Y.LastMove = potezi[i];
+						curr = MinimaxPlay(X,Y,turn*(-1),depth-1);
+						Y.LastMove = lm;
+						Y.x-=smerX[potezi[i]];
+						Y.y-=smerY[potezi[i]];
+					}
+				prosli = -1;
+				if(curr<bestValue)
+				{
+					bestValue=curr;
+					moveBest=potezi[i];
+				}
+			}
+		}
+		//if(depth === 0)
+		//	return Heuristic(X,Y);
+		find = moveBest;
+		return bestValue;
+		
+	}
+	
+	
+	
+	
+	
+	function LocalSearch(B,maximize) //lokalno planiranje
+	{
+	
+		var bestValue=1000000*maximize;
+		var moveBest = -1;
+		for(var what = 0; what < 5; what++)
+		{
+			if(what===4)
+			{
+				var curr;
+				var Temp = Object.assign({},B);
+				switch(MAP[B.y][B.x][0])
+				{
+					case 100:Temp.C+=1;CoinNum--;
+					if(maximize===1)
+					{
+						curr = Heuristic(B1,Temp);
+						if(curr<bestValue)
+						{
+							bestValue=curr;
+							moveBest=4;
+						}
+					}
+					else
+					{
+						curr = Heuristic(Temp,B2);
+						if(curr>bestValue)
+						{
+							bestValue=curr;
+							moveBest=4;
+						}
+					}
+					CoinNum++;break;
+					case 101:Temp.G+=1;GoldNum--;
+					if(maximize===1)
+					{
+						curr = Heuristic(B1,Temp);
+						if(curr<bestValue)
+						{
+							bestValue=curr;
+							moveBest=4;
+						}
+					}
+					else
+					{
+						curr = Heuristic(Temp,B2);
+						if(curr>bestValue)
+						{
+							bestValue=curr;
+							moveBest=4;
+						}
+					}
+					GoldNum++;break;
+					case 102:Temp.T+=1;TreasureNum--;
+					if(maximize===1)
+					{
+						curr = Heuristic(B1,Temp);
+						if(curr<bestValue)
+						{
+							bestValue=curr;
+							moveBest=4;
+						}
+					}
+					else
+					{
+						curr = Heuristic(Temp,B2);
+						if(curr>bestValue)
+						{
+							bestValue=curr;
+							moveBest=4;
+						}
+					}
+					TreasureNum++;break;
+				}
+			}
+			else
+			{
+				var curr;
+				var Temp = Object.assign({},B);
+				if(B.x+smerX[what]>=0&&B.x+smerX[what]<mapX&&B.y+smerY[what]>=0&&B.y+smerY[what]<mapY) // van mape
+				{
+					Temp.x += smerX[what];
+					Temp.y += smerY[what];
+					if(maximize===1)
+					{
+						curr = Heuristic(B1,Temp);
+						if(curr<bestValue)
+						{
+							bestValue=curr;
+							moveBest=what;
+						}
+					}
+					else
+					{
+						curr = Heuristic(Temp,B2);
+						if(curr>bestValue)
+						{
+							bestValue=curr;
+							moveBest=what;
+						}
+					}
+				}
+			}
+		}
+		return moveBest;
+	}
+	
+	
+	function BotPlay(X)
+	{
+		//var bestMove = LocalSearch(X,turn);
+		find=-1;
+		MinimaxPlay(B1,B2,turn,15);
+		var bestMove = find;
+		
+			
+		X.LastMove=bestMove;
+		//if(bestMove===-1)
+		//	X.LastMove=4;
+		MAP[X.y][X.x][X.mapIndex]=-1;
+		switch(bestMove)
+		{
+			case 0:X.x+=smerX[0];X.y+=smerY[0];break;
+			case 1:X.x+=smerX[1];X.y+=smerY[1];break;
+			case 2:X.x+=smerX[2];X.y+=smerY[2];break;
+			case 3:X.x+=smerX[3];X.y+=smerY[3];break;
+			case 4:X.Eat[0] = X.x; X.Eat[1]=X.y;break;
+		}
+		turn*=-1;
+	}
+	function BotPlayLocal(X)
+	{
+		var bestMove = LocalSearch(X,turn);
+
+		
+		
+			
+		X.LastMove=bestMove;
+		MAP[X.y][X.x][X.mapIndex]=-1;
+		switch(bestMove)
+		{
+			case 0:X.x+=smerX[0];X.y+=smerY[0];break;
+			case 1:X.x+=smerX[1];X.y+=smerY[1];break;
+			case 2:X.x+=smerX[2];X.y+=smerY[2];break;
+			case 3:X.x+=smerX[3];X.y+=smerY[3];break;
+			case 4:X.Eat[0] = X.x; X.Eat[1]=X.y;break;
+		}
+		turn*=-1;
+	}
+	function nextMove()
+	{
+		// ovo je samo za 2 igraca
+
+		if(turn===-1)
+		{
+			if(B1.Eat[1]!==-1)
+			{
+				switch(MAP[B1.y][B1.x][0])
+				{
+					case 100:B1.C+=1;CoinNum--;break;
+					case 101:B1.G+=1;GoldNum--;break;
+					case 102:B1.T+=1;TreasureNum--;break;
+				}
+				MAP[B1.y][B1.x][0]=-1;
+			}
+			B1.Eat[0] = -1;
+			B1.Eat[1] = -1;
+			//BotPlay(B1);
+			HumanPlayer(B1); // human player
+			B1.LastMove = 4; //Human
+			//BotPlayLocal(B1);
+		}
+		else if(turn===1)
+		{
+			B2.Eat[0] = -1;
+			B2.Eat[1] = -1;
+			//HumanPlayer(B2);
+			BotPlay(B2);
+			if(B2.Eat[1]!==-1)
+			{
+				if(B2.Eat[0]===B1.Eat[0]&&B2.Eat[1]===B1.Eat[1])
+				{
+					switch(MAP[B2.y][B2.x][0])
+					{
+						case 100:B1.C+=0.5;B2.C+=0.5;CoinNum--;break;
+						case 101:B1.G+=0.5;B2.G+=0.5;GoldNum--;break;
+						case 102:B1.T+=0.5;B2.T+=0.5;TreasureNum--;break;
+					}
+				}
+				else
+				{
+					switch(MAP[B2.y][B2.x][0])
+					{
+						case 100:B2.C+=1;CoinNum--;break;
+						case 101:B2.G+=1;GoldNum--;break;
+						case 102:B2.T+=1;TreasureNum--;break;
+					}
+				}
+				MAP[B2.y][B2.x][0]=-1;
+			}
+		}
+		//BotPlay
+		
+		MAP[B1.y][B1.x][B1.mapIndex]=B1.picValue;
+		MAP[B2.y][B2.x][B2.mapIndex]=B2.picValue;
+		refreshMap();
+		refreshTable(B1,B2,turn);
+		
+		var valueHeur = Heuristic(B1,B2);
+		document.getElementById("heuristic").innerHTML = valueHeur;
+		
+		
+		
+		
+		
+		
+		if(won+lost+tie!==3&&won!==2&&lost!==2)
+			setTimeout(nextMove,20);
+		else
+		{
+	
+			
+			
+			if(valueHeur===1000000||won===2)
+				document.getElementById("winner").innerHTML = 'Red player wins!';
+			else if(valueHeur===-1000000||lost===2)
+				document.getElementById("winner").innerHTML = 'Blue player wins!';
+			else if(valueHeur===0)
+				document.getElementById("winner").innerHTML = 'Tie!';
+			
+		}
+	}
+	
+	function init()
+	{
+		makeMap();
+		nextMove();
+	}
+	
+	init();
+	</script>
+	
+</body>
+</html>
